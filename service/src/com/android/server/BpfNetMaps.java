@@ -21,6 +21,7 @@ import static android.system.OsConstants.EOPNOTSUPP;
 import android.net.INetd;
 import android.os.RemoteException;
 import android.os.ServiceSpecificException;
+import android.os.SystemProperties;
 import android.system.Os;
 import android.util.Log;
 
@@ -39,6 +40,7 @@ public class BpfNetMaps {
     private final INetd mNetd;
     // Use legacy netd for releases before T.
     private static final boolean USE_NETD = !SdkLevel.isAtLeastT();
+    private static final boolean USE_EBPF = SystemProperties.getBoolean("ro.kernel.ebpf.supported", true);
     private static boolean sInitialized = false;
 
     /**
@@ -68,7 +70,11 @@ public class BpfNetMaps {
 
     private void maybeThrow(final int err, final String msg) {
         if (err != 0) {
-            throw new ServiceSpecificException(err, msg + ": " + Os.strerror(err));
+            if (USE_EBPF) {
+                throw new ServiceSpecificException(err, msg + ": " + Os.strerror(err));
+            } else {
+                Log.e(TAG, msg + ": " + Os.strerror(-err));
+            }
         }
     }
 
