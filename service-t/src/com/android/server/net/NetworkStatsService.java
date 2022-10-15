@@ -122,6 +122,7 @@ import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.ServiceSpecificException;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.provider.DeviceConfig;
@@ -195,6 +196,8 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     static final String TAG = "NetworkStats";
     static final boolean LOGD = Log.isLoggable(TAG, Log.DEBUG);
     static final boolean LOGV = Log.isLoggable(TAG, Log.VERBOSE);
+
+    private static final boolean USE_EBPF = SystemProperties.getBoolean("ro.kernel.ebpf.supported", true);
 
     // Perform polling and persist all (FLAG_PERSIST_ALL).
     private static final int MSG_PERFORM_POLL = 1;
@@ -2198,6 +2201,9 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
 
     @GuardedBy("mStatsLock")
     private void recordSnapshotLocked(long currentTime) throws RemoteException {
+        if (!USE_EBPF)
+            return;
+
         // snapshot and record current counters; read UID stats first to
         // avoid over counting dev stats.
         Trace.traceBegin(TRACE_TAG_NETWORK, "snapshotUid");
@@ -2402,6 +2408,8 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     private <K extends StatsMapKey, V extends StatsMapValue> void deleteStatsMapTagData(
             IBpfMap<K, V> statsMap, int uid) {
         try {
+            if (!USE_EBPF) return;
+
             statsMap.forEach((key, value) -> {
                 if (key.uid == uid) {
                     try {
@@ -2421,6 +2429,8 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
      * @param uid
      */
     private void deleteKernelTagData(int uid) {
+        if (!USE_EBPF) return;
+
         try {
             mCookieTagMap.forEach((key, value) -> {
                 // If SkDestroyListener deletes the socket tag while this code is running,
@@ -2440,7 +2450,6 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         } catch (ErrnoException e) {
             Log.e(TAG, "Failed to delete tag data from cookie tag map", e);
         }
-
         deleteStatsMapTagData(mStatsMapA, uid);
         deleteStatsMapTagData(mStatsMapB, uid);
 
